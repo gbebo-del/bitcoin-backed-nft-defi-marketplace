@@ -78,3 +78,18 @@
         (ok token-id)
     )
 )
+
+(define-public (transfer-nft (token-id uint) (recipient principal))
+    (let
+        (
+            (token (unwrap! (get-token-info token-id) err-invalid-token))
+        )
+        (asserts! (is-eq tx-sender (get owner token)) err-not-token-owner)
+        (asserts! (not (get is-staked token)) err-already-staked)
+        (map-set tokens
+            { token-id: token-id }
+            (merge token { owner: recipient })
+        )
+        (ok true)
+    )
+)
