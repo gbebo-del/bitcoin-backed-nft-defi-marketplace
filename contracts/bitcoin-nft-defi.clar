@@ -221,3 +221,26 @@
         (ok true)
     )
 )
+
+(define-public (transfer-shares (token-id uint) (recipient principal) (share-amount uint))
+    (let
+        (
+            (sender-shares (unwrap! (get-fractional-shares token-id tx-sender) err-insufficient-balance))
+            (recipient-shares (default-to { shares: u0 } (get-fractional-shares token-id recipient)))
+        )
+        (asserts! (>= (get shares sender-shares) share-amount) err-insufficient-balance)
+        
+        ;; Update sender's shares
+        (map-set fractional-ownership
+            { token-id: token-id, owner: tx-sender }
+            { shares: (- (get shares sender-shares) share-amount) }
+        )
+        
+        ;; Update recipient's shares
+        (map-set fractional-ownership
+            { token-id: token-id, owner: recipient }
+            { shares: (+ (get shares recipient-shares) share-amount) }
+        )
+        (ok true)
+    )
+)
