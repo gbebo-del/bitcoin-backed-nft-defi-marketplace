@@ -198,3 +198,26 @@
         (ok true)
     )
 )
+
+;; Fractional Ownership Functions
+(define-public (fractionalize-nft (token-id uint) (total-shares uint))
+    (let
+        (
+            (token (unwrap! (get-token-info token-id) err-invalid-token))
+        )
+        (asserts! (is-eq tx-sender (get owner token)) err-not-token-owner)
+        (asserts! (> total-shares u0) err-invalid-percentage)
+        
+        (map-set tokens
+            { token-id: token-id }
+            (merge token { fractional-shares: total-shares })
+        )
+        
+        ;; Assign all shares to the original owner
+        (map-set fractional-ownership
+            { token-id: token-id, owner: tx-sender }
+            { shares: total-shares }
+        )
+        (ok true)
+    )
+)
