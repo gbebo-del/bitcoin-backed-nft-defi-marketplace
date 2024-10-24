@@ -253,3 +253,11 @@
 (define-read-only (get-listing (token-id uint))
     (map-get? token-listings { token-id: token-id })
 )
+
+(define-read-only (get-fractional-shares (token-id uint) (owner principal))
+    (map-get? fractional-ownership { token-id: token-id, owner: owner })
+)
+
+(define-read-only (get-staking-rewards (token-id uint))
+    (map-get? staking-rewards { token-id: token-id })
+)
