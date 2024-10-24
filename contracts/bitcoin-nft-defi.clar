@@ -53,3 +53,28 @@
         last-claim: uint
     }
 )
+
+;; NFT Core Functions
+(define-public (mint-nft (uri (string-ascii 256)) (collateral uint))
+    (let
+        (
+            (token-id (+ (var-get total-supply) u1))
+            (collateral-requirement (/ (* (var-get min-collateral-ratio) collateral) u100))
+        )
+        (asserts! (>= (stx-get-balance tx-sender) collateral-requirement) err-insufficient-collateral)
+        (try! (stx-transfer? collateral-requirement tx-sender (as-contract tx-sender)))
+        (map-set tokens
+            { token-id: token-id }
+            {
+                owner: tx-sender,
+                uri: uri,
+                collateral: collateral,
+                is-staked: false,
+                stake-timestamp: u0,
+                fractional-shares: u0
+            }
+        )
+        (var-set total-supply token-id)
+        (ok token-id)
+    )
+)
