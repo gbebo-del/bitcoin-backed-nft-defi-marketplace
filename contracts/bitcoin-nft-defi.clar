@@ -244,3 +244,12 @@
         (ok true)
     )
 )
+
+;; Read-Only Functions
+(define-read-only (get-token-info (token-id uint))
+    (map-get? tokens { token-id: token-id })
+)
+
+(define-read-only (get-listing (token-id uint))
+    (map-get? token-listings { token-id: token-id })
+)
