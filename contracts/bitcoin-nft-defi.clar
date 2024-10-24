@@ -1,4 +1,5 @@
 ;; Bitcoin-Backed NFT Marketplace with DeFi Elements
+;; Version: 1.0.2
 
 ;; Constants
 (define-constant contract-owner tx-sender)
@@ -12,6 +13,9 @@
 (define-constant err-already-staked (err u107))
 (define-constant err-not-staked (err u108))
 (define-constant err-invalid-percentage (err u109))
+(define-constant err-invalid-uri (err u110))
+(define-constant err-invalid-recipient (err u111))
+(define-constant err-overflow (err u112))
 
 ;; Data Variables
 (define-data-var min-collateral-ratio uint u150)  ;; 150% minimum collateral ratio
@@ -54,6 +58,33 @@
     }
 )
 
+;; Private Functions for Input Validation
+(define-private (validate-uri (uri (string-ascii 256)))
+    (let
+        (
+            (uri-len (len uri))
+        )
+        (and
+            (> uri-len u0)
+            (<= uri-len u256)
+        )
+    )
+)
+
+(define-private (validate-recipient (recipient principal))
+    (not (is-eq recipient (as-contract tx-sender)))
+)
+
+(define-private (safe-add (a uint) (b uint))
+    (let
+        (
+            (sum (+ a b))
+        )
+        (asserts! (>= sum a) err-overflow)
+        (ok sum)
+    )
+)
+
 ;; NFT Core Functions
 (define-public (mint-nft (uri (string-ascii 256)) (collateral uint))
     (let
@@ -61,6 +92,7 @@
             (token-id (+ (var-get total-supply) u1))
             (collateral-requirement (/ (* (var-get min-collateral-ratio) collateral) u100))
         )
+        (asserts! (validate-uri uri) err-invalid-uri)
         (asserts! (>= (stx-get-balance tx-sender) collateral-requirement) err-insufficient-collateral)
         (try! (stx-transfer? collateral-requirement tx-sender (as-contract tx-sender)))
         (map-set tokens
@@ -84,6 +116,7 @@
         (
             (token (unwrap! (get-token-info token-id) err-invalid-token))
         )
+        (asserts! (validate-recipient recipient) err-invalid-recipient)
         (asserts! (is-eq tx-sender (get owner token)) err-not-token-owner)
         (asserts! (not (get is-staked token)) err-already-staked)
         (map-set tokens
@@ -147,6 +180,32 @@
     )
 )
 
+;; Fractional Ownership Functions
+(define-public (transfer-shares (token-id uint) (recipient principal) (share-amount uint))
+    (let
+        (
+            (sender-shares (unwrap! (get-fractional-shares token-id tx-sender) err-insufficient-balance))
+            (current-recipient-shares (default-to { shares: u0 } (get-fractional-shares token-id recipient)))
+            (recipient-new-shares (unwrap! (safe-add (get shares current-recipient-shares) share-amount) err-overflow))
+        )
+        (asserts! (validate-recipient recipient) err-invalid-recipient)
+        (asserts! (>= (get shares sender-shares) share-amount) err-insufficient-balance)
+        
+        ;; Update sender's shares
+        (map-set fractional-ownership
+            { token-id: token-id, owner: tx-sender }
+            { shares: (- (get shares sender-shares) share-amount) }
+        )
+        
+        ;; Update recipient's shares
+        (map-set fractional-ownership
+            { token-id: token-id, owner: recipient }
+            { shares: recipient-new-shares }
+        )
+        (ok true)
+    )
+)
+
 ;; Staking Functions
 (define-public (stake-nft (token-id uint))
     (let
@@ -195,52 +254,6 @@
             })
         )
         (var-set total-staked (- (var-get total-staked) u1))
-        (ok true)
-    )
-)
-
-;; Fractional Ownership Functions
-(define-public (fractionalize-nft (token-id uint) (total-shares uint))
-    (let
-        (
-            (token (unwrap! (get-token-info token-id) err-invalid-token))
-        )
-        (asserts! (is-eq tx-sender (get owner token)) err-not-token-owner)
-        (asserts! (> total-shares u0) err-invalid-percentage)
-        
-        (map-set tokens
-            { token-id: token-id }
-            (merge token { fractional-shares: total-shares })
-        )
-        
-        ;; Assign all shares to the original owner
-        (map-set fractional-ownership
-            { token-id: token-id, owner: tx-sender }
-            { shares: total-shares }
-        )
-        (ok true)
-    )
-)
-
-(define-public (transfer-shares (token-id uint) (recipient principal) (share-amount uint))
-    (let
-        (
-            (sender-shares (unwrap! (get-fractional-shares token-id tx-sender) err-insufficient-balance))
-            (recipient-shares (default-to { shares: u0 } (get-fractional-shares token-id recipient)))
-        )
-        (asserts! (>= (get shares sender-shares) share-amount) err-insufficient-balance)
-        
-        ;; Update sender's shares
-        (map-set fractional-ownership
-            { token-id: token-id, owner: tx-sender }
-            { shares: (- (get shares sender-shares) share-amount) }
-        )
-        
-        ;; Update recipient's shares
-        (map-set fractional-ownership
-            { token-id: token-id, owner: recipient }
-            { shares: (+ (get shares recipient-shares) share-amount) }
-        )
         (ok true)
     )
 )
